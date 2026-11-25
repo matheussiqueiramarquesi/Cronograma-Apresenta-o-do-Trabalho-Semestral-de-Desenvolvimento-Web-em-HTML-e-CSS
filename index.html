@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trabalho semestral de desenvolvimento do site Web em HTML e CSS - Prof. Lucimar</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b2030;--mut:#667085;--ac:#2f5bea;--acx:#fff;--ok:#e8f5ee;--okx:#1d6b43;--tk:#eceef3;--bd:#d9dde7;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141b;--card:#1c1f2a;--tx:#eceef6;--mut:#9aa3b8;--ac:#7c9bff;--acx:#10131c;--ok:#16301f;--okx:#7fdca5;--tk:#262a38;--bd:#343949}}
+:root[data-theme="dark"]{--bg:#12141b;--card:#1c1f2a;--tx:#eceef6;--mut:#9aa3b8;--ac:#7c9bff;--acx:#10131c;--ok:#16301f;--okx:#7fdca5;--tk:#262a38;--bd:#343949}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.6rem;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px}
+label{font-weight:600;display:block;margin-bottom:6px}
+select{width:100%;font-size:1rem;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+select:disabled{opacity:1;background:var(--ok);color:var(--okx);border-color:var(--okx);font-weight:600}
+.row{display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--bd)}
+.row:first-of-type{border-top:0}
+.row b{font-size:1.05rem}
+.lib{font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--bd);background:transparent;color:var(--mut);cursor:pointer}
+.lib:hover{border-color:var(--ac);color:var(--ac)}
+.day h2{font-size:1.05rem;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+button.slot{font:inherit;padding:12px 8px;border-radius:10px;border:1px solid var(--ac);background:transparent;color:var(--ac);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+button.slot b{font-size:1.05rem}
+button.slot:hover:not(:disabled){background:var(--ac);color:var(--acx)}
+button.slot.taken{border-color:var(--bd);background:var(--tk);color:var(--mut);cursor:not-allowed}
+button.slot.mine{border-color:var(--okx);background:var(--ok);color:var(--okx);cursor:pointer}
+.pend{color:var(--mut);font-size:.95rem}
+#msg{position:sticky;bottom:12px;background:var(--tx);color:var(--bg);padding:10px 14px;border-radius:10px;display:none;margin-top:8px}
+.warn{padding:10px 12px;border-radius:10px;background:var(--tk);color:var(--mut);display:none;margin-bottom:16px}
+</style>
+</head>
+<body>
+<main>
+<h1>Trabalho semestral de desenvolvimento do site Web em HTML e CSS - Prof. Lucimar</h1>
+<p class="sub">Escolha de horário: cada grupo tem 13 minutos. Em cada horário livre, selecione o seu grupo. Um horário só pode ter um grupo, e cada grupo só pode ter um horário. Intervalo das 14:40 às 14:50.</p>
+<div class="warn" id="warn">Não foi possível conectar ao banco de dados. Confira a URL do Firebase no arquivo (variável DB_URL) e as regras do banco.</div>
+<div id="days"></div>
+<div class="card"><b id="count"></b><div class="pend" id="pend"></div></div>
+<div id="msg" role="status"></div>
+</main>
+<script>
+// ===== CONFIGURAÇÃO =====
+// Cole aqui a URL do seu Firebase Realtime Database, sem barra no final.
+// Exemplo: "https://meu-projeto-default-rtdb.firebaseio.com"
+const DB_URL = "https://cronograma-informaticaenegocio-default-rtdb.firebaseio.com/";
+// ========================
+const NAMES = ["Matheus Marquesi, Henrico e Wayne","Igor, Fabio e Arthur","Fabio Zopi, Arielly e Breno","Leonardo, Alefy e Otto","Vagner e Jorge","Miguel Schiavinatto, Heitor e Daniel","Matheus Grava, Miguel e Gustavo","Bruna, Cristiane e Maria Luiza","Ana Julia, Anyzaura e Ana Paula","Hyasmin, Caroline e Nathaly","Augusto, Felipe M. e Otávio","Victor Miguel, Idekim e Danilo"];
+const GROUPS = NAMES.length;
+const DUR = 13; // minutos por grupo
+const toMin = t => +t.slice(0,2)*60 + +t.slice(3,5);
+const fmt = m => String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0");
+const endOf = t => fmt(toMin(t) + DUR);
+// Aula das 13:00 às 16:30, com intervalo das 14:40 às 14:50.
+function mk(){ const out=[]; [[13*60,14*60+40],[14*60+50,16*60+30]].forEach(([a,b]) => { for (let m=a; m+DUR<=b; m+=DUR) out.push(fmt(m)); }); return out; }
+const DAYS = [{label:"Dia das apresentações", key:"dia1", times:mk()}];
+const daysEl = document.getElementById("days");
+const bookings = {}; let pending = false;
+const sid = (d,t) => d.key + "_" + t.replace(":","");
+const gname = g => "Grupo " + String(g).padStart(2,"0") + ": " + NAMES[g-1];
+const mySlot = g => Object.keys(bookings).find(k => bookings[k] === g);
+const url = p => DB_URL + p + ".json";
+const warn = () => { document.getElementById("warn").style.display = "block"; };
+function toast(t){ const m=document.getElementById("msg"); m.textContent=t; m.style.display="block"; clearTimeout(toast.t); toast.t=setTimeout(()=>m.style.display="none",4000); }
+function render(){
+  if (document.activeElement && document.activeElement.tagName === "SELECT") { pending = true; return; }
+  pending = false; daysEl.textContent = "";
+  DAYS.forEach(d => {
+    const box = document.createElement("div"); box.className = "card day";
+    const h = document.createElement("h2"); h.textContent = d.label; box.appendChild(h);
+    d.times.forEach(t => {
+      const id = sid(d,t), who = bookings[id];
+      const row = document.createElement("div"); row.className = "row";
+      const tm = document.createElement("b"); tm.textContent = t + "–" + endOf(t);
+      const sel = document.createElement("select"); sel.setAttribute("aria-label", "Grupo no horário " + t);
+      const free = document.createElement("option"); free.value = ""; free.textContent = "Livre: selecione o grupo"; sel.appendChild(free);
+      for (let g = 1; g <= GROUPS; g++) {
+        const o = document.createElement("option"); o.value = g; o.textContent = gname(g);
+        const other = mySlot(g); if (other && other !== id) { o.disabled = true; o.textContent += " (já escolheu)"; }
+        sel.appendChild(o);
+      }
+      sel.value = who ? String(who) : "";
+      row.append(tm, sel);
+      if (who) { sel.disabled = true; const b = document.createElement("button"); b.className = "lib"; b.type = "button"; b.textContent = "Liberar"; b.onclick = () => release(id, who, t); row.appendChild(b); }
+      else sel.onchange = () => claim(id, Number(sel.value), t);
+      sel.onblur = () => { if (pending) render(); };
+      box.appendChild(row);
+    });
+    daysEl.appendChild(box);
+  });
+  const done = new Set(Object.values(bookings));
+  document.getElementById("count").textContent = done.size + " de " + GROUPS + " grupos já escolheram";
+  const pend = []; for (let i=1;i<=GROUPS;i++) if(!done.has(i)) pend.push(i);
+  document.getElementById("pend").textContent = pend.length ? "Faltam: grupo " + pend.join(", ") : "Todos os grupos escolheram.";
+}
+async function refresh(){
+  try {
+    const r = await fetch(url("/slots"), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const data = (await r.json()) || {};
+    Object.keys(bookings).forEach(k => delete bookings[k]);
+    Object.keys(data).forEach(k => { if (data[k] && data[k].group) bookings[k] = Number(data[k].group); });
+    document.getElementById("warn").style.display = "none";
+    render();
+  } catch(e){ warn(); }
+}
+async function claim(id, g, t){
+  if (!g) return;
+  if (mySlot(g)) { toast("O Grupo " + g + " já tem um horário. Libere-o antes de trocar."); return render(); }
+  if (!confirm("Confirmar o Grupo " + g + " às " + t + "–" + endOf(t) + "?")) return render();
+  try {
+    // As regras do banco só aceitam gravar se o horário ainda estiver livre.
+    const r = await fetch(url("/slots/" + id), {method:"PUT", body: JSON.stringify({group:g})});
+    if (r.ok) toast("Horário confirmado para o Grupo " + g + ".");
+    else toast("Esse horário já foi escolhido por outro grupo.");
+  } catch(e){ toast("Não foi possível salvar. Tente de novo."); }
+  refresh();
+}
+async function release(id, g, t){
+  if (!confirm("Liberar o horário " + t + "–" + endOf(t) + " do Grupo " + g + "?")) return;
+  try { const r = await fetch(url("/slots/" + id), {method:"DELETE"}); toast(r.ok ? "Horário liberado." : "Não foi possível liberar."); }
+  catch(e){ toast("Não foi possível liberar."); }
+  refresh();
+}
+render();
+if (DB_URL.indexOf("COLE_AQUI") === 0) { warn(); }
+else {
+  refresh();
+  try { const es = new EventSource(url("/slots")); es.addEventListener("put", refresh); es.addEventListener("patch", refresh); } catch(e) {}
+  setInterval(refresh, 15000); // reserva caso a conexão em tempo real caia
+}
+</script>
+</body>
+</html>
